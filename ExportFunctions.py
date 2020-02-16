@@ -71,6 +71,31 @@ def buildSearchVals(instructions, maxVal):
         "mask":value_mask
     }
 
+def buildOverrides(instructions):
+    overrides = []
+    for i,inst in enumerate(instructions):
+        if inst.getFlowOverride() != ghidra.program.model.listing.FlowOverride.NONE:
+            overrides.append({"id":i,"flow":inst.getFlowOverride().toString()})
+    return overrides
+
+def buildParams(function):
+    ret = []
+    if not function.hasCustomVariableStorage():
+        return ret
+    
+    for param in function.getParameters():
+        param_dict = {
+            "type": param.getDataType().toString(),
+            "name": param.getName()
+        }
+        storage = param.getVariableStorage()
+        if storage.isRegisterStorage():
+            param_dict["register"] = storage.getRegister().toString()
+        elif storage.isStackStorage:
+            param_dict["stack"] = storage.getStackOffset()
+        ret += [param_dict]
+    return ret
+
 
 def buildRefList(instructions):
     refs = {}
@@ -105,7 +130,7 @@ def buildRefList(instructions):
                         ref["operand"] = operand_id
                         ref["operand_object"] = operand_object_id
                         ref["type"] = "scalar"
-                if len(ref):
+                if len(ref) and ref["name"] not in refs:
                     name = ref["name"]
                     refs[name] = ref
                     if name in refcount:
@@ -119,26 +144,36 @@ def handleFunction(function):
     function_dict = {}
 
     proto = function.getPrototypeString(False, False)
-    if (proto != "undefined {0}()".format(function.getName())):
+    if proto != "undefined {0}()".format(function.getName()):
         function_dict["prototype"] = function.getPrototypeString(False, False)
-    function_dict["custom"] = function.hasCustomVariableStorage()
+    function_dict["params"] = buildParams(function)
     function_dict["tags"] = [a.getName() for a in function.getTags()]
+
+    comment_dict = {}
+    if function.getComment():
+        function_dict["comment"] = function.getComment()
+        if function.getComment()[0] == "{":
+            comment_dict = json.loads(function.getComment())
+
+    
     if 'OBFUSCATED' in function_dict["tags"]:
         json_dict["functions"][function.getName()] = function_dict
         return
 
+    
     instructions = []
     instruction_bytes = []
     body = function.getBody()
+    first_range = body.getAddressRanges(function.getEntryPoint(), True).next()
     inst = getFirstInstruction(function)
-    while inst is not None and body.contains(inst.address):
+    while inst is not None and first_range.contains(inst.address):
         by = [(i + 256 if i < 0 else i) for i in inst.getBytes()]
         instruction_bytes.append(by)
         instructions.append(inst)
         inst = inst.getNext()
-    
+    function_dict["search"] = buildSearchVals(instructions, comment_dict.get("maxOperand", 0))
     function_dict["references"] = buildRefList(instructions)
-    function_dict["search"] = buildSearchVals(instructions, 0x0)
+    function_dict["flow"] = buildOverrides(instructions)
 
     json_dict["functions"][function.getName()] = function_dict
 

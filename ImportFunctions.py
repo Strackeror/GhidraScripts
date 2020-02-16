@@ -35,7 +35,7 @@ def disassembleFunc(addr):
     print "disassembling",addr
     ghidra.app.cmd.disassemble.DisassembleCommand(addr, None, True).applyTo(currentProgram, monitor)
 
-def handleReferences(function, ref_dic):
+def getFuncInstructions(function):
     instructions = []
     instruction = getFirstInstruction(function)
     while function.getBody().contains(instruction.address):
@@ -43,7 +43,9 @@ def handleReferences(function, ref_dic):
         instruction = instruction.getNext()
         if instruction is None:
             break
+    return instructions
 
+def handleReferences(instructions, ref_dic):
     for refname in ref_dic:
         if refname in functions or refname in symbols:
             continue
@@ -56,7 +58,8 @@ def handleReferences(function, ref_dic):
         try:
             target_obj = instructions[instruction_index].getOpObjects(operand_id)[operand_obj_id]
         except:
-            print ""
+            print "ERROR ACCESSING REF at instruction:",instruction_index,operand_id,operand_obj_id,ref_type
+            print instructions[instruction_index]
             continue
         print target_obj
 
@@ -76,6 +79,34 @@ def handleReferences(function, ref_dic):
             handleFunction(addr, refname, True)
         elif refname in json_dict["symbols"]:
             handleSymbol(addr, refname)
+
+dt_parser =  ghidra.util.data.DataTypeParser(
+    ghidra.app.plugin.core.analysis.DefaultDataTypeManagerService(), 
+    ghidra.util.data.DataTypeParser.AllowedDataTypes.ALL)
+
+def handleParams(function, param_arr):
+    if len(param_arr) == 0:
+        return
+    function.setCustomVariableStorage(True)
+    while(function.getParameterCount()):
+        function.removeParameter(0)
+    
+    for param_dic in param_arr:
+        data_type = dt_parser.parse(param_dic["type"])
+        storage = None
+        if param_dic.get("register"):
+            storage = ghidra.program.model.listing.VariableStorage( 
+                currentProgram, [currentProgram.getRegister(param_dic["register"])])
+        elif param_dic.get("stack"):
+            storage = ghidra.program.model.listing.VariableStorage(
+                currentProgram, param_dic["stack"], data_type.getLength()
+            )
+            
+        param = ghidra.program.model.listing.ParameterImpl(
+            param_dic["name"], data_type, storage, currentProgram)
+        function.addParameter(param, ghidra.program.model.symbol.SourceType.USER_DEFINED)
+        
+
 
 functions = {}
 symbols = {}
@@ -107,10 +138,14 @@ def handleFunction(addr, name, recheck = False):
         sig = parser.parse(func.getSignature(), func_dict["prototype"])
         ghidra.app.cmd.function.ApplyFunctionSignatureCmd(func.getEntryPoint(), sig, ghidra.program.model.symbol.SourceType.USER_DEFINED).applyTo(currentProgram, monitor)
         print "setting",(sig.getPrototypeString())
+    
+    handleParams(func, func_dict["params"])
 
     tags = func_dict["tags"]
     for tag in tags:
         func.addTag(tag)
+    if func_dict.get("comment", None):
+        func.setComment(func_dict["comment"])
     if 'OBFUSCATED' in tags:
         print 'Skipping obfuscated function'
         return
@@ -122,7 +157,11 @@ def handleFunction(addr, name, recheck = False):
             print "failure"
             return
         print "success"
-    handleReferences(func,func_dict["references"])
+    instructions = getFuncInstructions(func)
+    for flow in func_dict["flow"]:
+        instructions[flow["id"]].setFlowOverride(
+            ghidra.program.model.listing.FlowOverride.valueOf(flow["flow"]))
+    handleReferences(instructions,func_dict["references"])
 
 function_order = json_dict["functions"].items()
 function_order.sort(key = lambda (_, fd): fd["refcount"])
@@ -137,6 +176,8 @@ for name, func in function_order:
         continue
     print 'function found'
     handleFunction(addrs[0], name)
+    if (func["refcount"] < 0):
+        break
 
 
 for name in json_dict["functions"]:
