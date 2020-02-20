@@ -10,9 +10,6 @@ import ghidra
 
 
 symbolTable = currentProgram.getSymbolTable()
-namespace = symbolTable.getNamespace("MH", currentProgram.getGlobalNamespace())
-if namespace is None:
-    namespace = symbolTable.createNameSpace(currentProgram.getGlobalNamespace(), "MH", ghidra.program.model.symbol.SourceType.USER_DEFINED)
 
 monitor = ghidra.util.task.TaskMonitor.DUMMY
 
@@ -30,6 +27,17 @@ def maskedSearch(values, mask, addr_set = None):
     acc = ghidra.util.datastruct.ListAccumulator()
     alg.search(acc, monitor)
     return [i.getAddress() for i in acc]
+
+def getNamespace(hierarchy):
+    namespace = None
+    for name in hierarchy:
+        next = symbolTable.getNamespace(name, namespace)
+        if next is None:
+            next = symbolTable.createNameSpace(namespace, name, ghidra.program.model.symbol.SourceType.USER_DEFINED)
+        namespace = next
+    return namespace
+        
+
 
 def disassembleFunc(addr):
     print "disassembling",addr
@@ -72,6 +80,7 @@ def handleReferences(instructions, ref_dic):
             disassembleFunc(target_obj)
             function = createFunction(target_obj, None)
             addr = function.getThunkedFunction(False).getEntryPoint()
+
         if addr is None:
             continue
 
@@ -112,26 +121,29 @@ functions = {}
 symbols = {}
 
 def handleSymbol(addr, name):
+    if name in symbols:
+        return
     print "handling symbol",addr,name
-    symbol = createSymbol(addr, name, False)
+    symbol_dict = json_dict["symbols"][name]
+    symbol = createSymbol(addr, symbol_dict["name"], False)
     if symbol is None:
         return
-    symbol.setNamespace(namespace)
+    symbol.setNamespace(getNamespace(symbol_dict["namespace"]))
     symbols[name] = symbol
 
 def handleFunction(addr, name, recheck = False):
     print "handling function",addr,name
     disassembleFunc(addr)
-    func = createFunction(addr, name)
+    func_dict = json_dict["functions"][name]
+    func = createFunction(addr, func_dict["name"])
     if func is None:
         func = getFunctionAt(addr)
         if func is None:
             return
-        func.setName(name, ghidra.program.model.symbol.SourceType.USER_DEFINED)
+        func.setName(func_dict["name"], ghidra.program.model.symbol.SourceType.USER_DEFINED)
 
-    func.getSymbol().setNamespace(namespace)
-    func_dict = json_dict["functions"][name]
     functions[name] = func
+    func.getSymbol().setNamespace(getNamespace(func_dict["namespace"]))
 
     if "prototype" in func_dict:
         parser = ghidra.app.util.parser.FunctionSignatureParser(currentProgram.getDataTypeManager(), ghidra.app.plugin.core.analysis.DefaultDataTypeManagerService())

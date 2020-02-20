@@ -19,7 +19,8 @@ json_dict = {
 }
 refcount = {}
 symbolTable = currentProgram.getSymbolTable()
-namespace = symbolTable.getNamespace("MH", currentProgram.getGlobalNamespace())
+basename = "MH"
+main_namespace = symbolTable.getNamespace(basename, currentProgram.getGlobalNamespace())
 functionManager = currentProgram.getFunctionManager()
 dataTypeManager = currentProgram.getDataTypeManager()
 
@@ -107,8 +108,8 @@ def buildRefList(instructions):
                 op_obj = inst.getOpObjects(operand_id)[operand_object_id]
                 if isinstance(op_obj, ghidra.program.model.address.GenericAddress) and symbolTable.hasSymbol(op_obj):
                     symbol = symbolTable.getSymbols(op_obj)[0]
-                    if symbol.getParentNamespace() == namespace:
-                        ref["name"] = symbol.getName()
+                    if basename in symbol.getPath():
+                        ref["name"] = symbol.getName(True)
                         ref["instruction"] = i
                         ref["operand"] = operand_id
                         ref["operand_object"] = operand_object_id
@@ -116,16 +117,16 @@ def buildRefList(instructions):
                     elif functionManager.getFunctionAt(op_obj) is not None:
                         function = functionManager.getFunctionAt(op_obj)
                         function = function.getThunkedFunction(True)
-                        if function is not None and function.getParentNamespace() == namespace:
-                            ref["name"] = function.getName()
+                        if function is not None and basename in function.getSymbol().getPath():
+                            ref["name"] = function.getName(True)
                             ref["instruction"] = i
                             ref["operand"] = operand_id
                             ref["operand_object"] = operand_object_id
                             ref["type"] = "thunked"
                 elif isinstance(op_obj, ghidra.program.model.scalar.Scalar) and symbolTable.hasSymbol(toAddr(op_obj.getValue())):
                     symbol = symbolTable.getSymbols(toAddr(op_obj.getValue()))[0]
-                    if symbol and symbol.getParentNamespace() == namespace:
-                        ref["name"] = symbol.getName()
+                    if symbol and basename in symbol.getPath():
+                        ref["name"] = symbol.getName(True)
                         ref["instruction"] = i
                         ref["operand"] = operand_id
                         ref["operand_object"] = operand_object_id
@@ -148,6 +149,8 @@ def handleFunction(function):
         function_dict["prototype"] = function.getPrototypeString(False, False)
     function_dict["params"] = buildParams(function)
     function_dict["tags"] = [a.getName() for a in function.getTags()]
+    function_dict["name"] = function.getName()
+    function_dict["namespace"] = list(function.getSymbol().getPath()[:-1])
 
     comment_dict = {}
     if function.getComment():
@@ -157,7 +160,7 @@ def handleFunction(function):
 
     
     if 'OBFUSCATED' in function_dict["tags"]:
-        json_dict["functions"][function.getName()] = function_dict
+        json_dict["functions"][function.getName(True)] = function_dict
         return
 
     
@@ -175,11 +178,13 @@ def handleFunction(function):
     function_dict["references"] = buildRefList(instructions)
     function_dict["flow"] = buildOverrides(instructions)
 
-    json_dict["functions"][function.getName()] = function_dict
+    json_dict["functions"][function.getName(True)] = function_dict
 
 def handleSymbol(symbol):
     symbol_dict = {}
-    json_dict["symbols"][symbol.getName()] = symbol_dict
+    symbol_dict["namespace"] = list(symbol.getPath()[:-1])
+    symbol_dict["name"] = symbol.getName()
+    json_dict["symbols"][symbol.getName(True)] = symbol_dict
 
 def handleStructs():
     sio = StringWriter()
@@ -189,16 +194,21 @@ def handleStructs():
     writer.write(dataTypeManager.getCategory(ghidra.program.model.data.CategoryPath("/MH")), mon)
     json_dict["dataTypes"] = sio.toString()
 
+def handleNamespace(namespace):
+    for symbol in symbolTable.getSymbols(namespace):
+        print(symbol, symbol.address)
+        if functionManager.getFunctionAt(symbol.address) is not None:
+            handleFunction(functionManager.getFunctionAt(symbol.address))
+        elif symbolTable.getNamespace(symbol.getName(), namespace) is not None:
+            handleNamespace(symbolTable.getNamespace(symbol.getName(), namespace))
+        else:
+            handleSymbol(symbol)
+
 
 targetName = str(askFile("Export file", "Choose export file"))
 targetFile = open(targetName, 'w')
 
-for symbol in symbolTable.getSymbols(namespace):
-    print(symbol, symbol.address)
-    if functionManager.getFunctionAt(symbol.address) is not None:
-        handleFunction(functionManager.getFunctionAt(symbol.address))
-    else:
-        handleSymbol(symbol)
+handleNamespace(main_namespace)
 
 for name in json_dict["functions"]:
     func_dict = json_dict["functions"][name]
