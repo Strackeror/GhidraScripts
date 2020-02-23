@@ -151,6 +151,7 @@ def handleFunction(function):
     function_dict["tags"] = [a.getName() for a in function.getTags()]
     function_dict["name"] = function.getName()
     function_dict["namespace"] = list(function.getSymbol().getPath()[:-1])
+    function_dict["address"] = function.getEntryPoint().getOffset()
 
     comment_dict = {}
     if function.getComment():
@@ -184,6 +185,10 @@ def handleSymbol(symbol):
     symbol_dict = {}
     symbol_dict["namespace"] = list(symbol.getPath()[:-1])
     symbol_dict["name"] = symbol.getName()
+    symbol_dict["address"] = symbol.getAddress().getOffset()
+    data = getDataAt(symbol.getAddress())
+    if data:
+        symbol_dict["type"] = data.getDataType().toString()
     json_dict["symbols"][symbol.getName(True)] = symbol_dict
 
 def handleStructs():

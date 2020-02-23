@@ -128,6 +128,8 @@ def handleSymbol(addr, name):
     symbol = createSymbol(addr, symbol_dict["name"], False)
     if symbol is None:
         return
+    if symbol_dict["type"]:
+        createData(dt_parser.parse(symbol_dict["type"]))
     symbol.setNamespace(getNamespace(symbol_dict["namespace"]))
     symbols[name] = symbol
 

@@ -17,8 +17,10 @@ def handleSymbol(symbol):
 
 def handleFunction(function):
     params = "" 
-    for param in function.getParameters():
-        params += "," + param.getDataType().toString()
+    #for param in function.getParameters():
+    #    params += "," + param.getDataType().toString()
+    for i in range(function.getParameterCount()):
+        params += "," + function.getParameter(i).getDataType().toString()
     params = params[1:]
     returnType = function.getReturnType().toString()
     if returnType == "undefined":
@@ -49,8 +51,10 @@ def handleNamespace(namespace):
 print ("""
 #pragma once
 typedef unsigned char undefined; 
-typedef unsigned char byte; 
+typedef unsigned short undefined2;
+typedef unsigned int undefined4;
 typedef unsigned long long undefined8;
+typedef unsigned char byte; 
 typedef unsigned long long ulonglong;
 typedef long long longlong;
 typedef unsigned int uint;
