@@ -14,6 +14,7 @@ symbolTable = currentProgram.getSymbolTable()
 monitor = ghidra.util.task.TaskMonitor.DUMMY
 
 targetName = str(askFile("Import file", "Choose import file"))
+use_addresses = askYesNo("Use addresses ?", "Use addresses ?")
 targetFile = open(targetName, 'r')
 json_dict = json.load(targetFile)
 
@@ -126,10 +127,8 @@ def handleSymbol(addr, name):
     print "handling symbol",addr,name
     symbol_dict = json_dict["symbols"][name]
     symbol = createSymbol(addr, symbol_dict["name"], False)
-    if symbol is None:
-        return
-    if symbol_dict["type"]:
-        createData(dt_parser.parse(symbol_dict["type"]))
+    if "type" in symbol_dict:
+        createData(addr, dt_parser.parse(symbol_dict["type"]))
     symbol.setNamespace(getNamespace(symbol_dict["namespace"]))
     symbols[name] = symbol
 
@@ -184,14 +183,21 @@ for name, func in function_order:
     if name in functions or 'OBFUSCATED' in func["tags"]:
         continue
     print "searching for", name,
-    addrs = maskedSearch(func["search"]["value"], func["search"]["mask"])
-    if len(addrs) != 1:
-        print 'function not found'
-        continue
-    print 'function found'
+    if not use_addresses:
+        addrs = maskedSearch(func["search"]["value"], func["search"]["mask"])
+        if len(addrs) != 1:
+            print 'function not found'
+            continue
+        print 'function found'
+    else:
+        addrs = [toAddr(func["address"])]
     handleFunction(addrs[0], name)
     if (func["refcount"] < 0):
         break
+
+if use_addresses:
+    for name in json_dict["symbols"]:
+        handleSymbol(toAddr(json_dict["symbols"][name]["address"]), name)
 
 
 for name in json_dict["functions"]:
