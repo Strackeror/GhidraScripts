@@ -6,7 +6,9 @@ functionManager = currentProgram.getFunctionManager()
 main_namespace = symbolTable.getNamespace(basename, None)
 indent = ""
 
-targetName = str(askFile("Export file", "Choose export file"))
+#targetName = str(askFile("Export file", "Choose export file"))
+targetName = r"D:\Dev\GhidraScripts\ghidra_export.h"
+
 targetFile = open(targetName, 'w')
 
 def escapeName(str):
@@ -58,5 +60,6 @@ typedef unsigned char byte;
 typedef unsigned long long ulonglong;
 typedef long long longlong;
 typedef unsigned int uint;
+typedef unsigned short ushort;
 """, file=targetFile)
 handleNamespace(main_namespace)

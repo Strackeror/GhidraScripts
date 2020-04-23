@@ -80,7 +80,10 @@ def handleReferences(instructions, ref_dic):
         elif ref_type == "thunked":
             disassembleFunc(target_obj)
             function = createFunction(target_obj, None)
-            addr = function.getThunkedFunction(False).getEntryPoint()
+            if (function and function.getThunkedFunction(False)):
+                addr = function.getThunkedFunction(False).getEntryPoint()
+            else:
+                print "ERROR THUNKED", refname, target_obj
 
         if addr is None:
             continue
