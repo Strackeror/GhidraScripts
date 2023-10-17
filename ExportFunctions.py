@@ -2,6 +2,7 @@
 # Export functions
 # @author Strackeror
 # @category MH
+#type: ignore
 
 
 import ghidra
@@ -19,7 +20,8 @@ json_dict = {
 }
 refcount = {}
 symbolTable = currentProgram.getSymbolTable()
-basename = "MH"
+basename = askString("namespace", "choose namespace")
+archive = askString("archive", "choose archive")
 main_namespace = symbolTable.getNamespace(basename, currentProgram.getGlobalNamespace())
 functionManager = currentProgram.getFunctionManager()
 dataTypeManager = currentProgram.getDataTypeManager()
@@ -196,7 +198,7 @@ def handleStructs():
     sio.write("a")
     writer = ghidra.program.model.data.DataTypeWriter(dataTypeManager, sio)
     mon = ghidra.util.task.DummyCancellableTaskMonitor()
-    writer.write(dataTypeManager.getCategory(ghidra.program.model.data.CategoryPath("/MH")), mon)
+    writer.write(dataTypeManager.getCategory(ghidra.program.model.data.CategoryPath("/" + archive)), mon)
     json_dict["dataTypes"] = sio.toString()
 
 def handleNamespace(namespace):
@@ -214,6 +216,7 @@ targetName = str(askFile("Export file", "Choose export file"))
 targetFile = open(targetName, 'w')
 
 handleNamespace(main_namespace)
+print(handleStructs())
 
 for name in json_dict["functions"]:
     func_dict = json_dict["functions"][name]
